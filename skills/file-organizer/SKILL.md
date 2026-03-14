@@ -1,6 +1,6 @@
 ---
 name: file-organizer
-description: "文件自动分类 - 支持单项目(类型优先)和多项目(项目优先)两种模式。使用场景：工作区文件整理、多项目管理、截图/脚本/配置文件归档。"
+description: "文件自动分类 - 支持新建项目的目录设计、文件分类建议。主要用途：创建新项目时提供目录结构指导、新建文件时自动分类、工作区整理建议。"
 homepage: https://github.com/Guic3136/openclaw-skills/tree/main/skills/file-organizer
 metadata:
   openclaw:
@@ -12,370 +12,439 @@ metadata:
 
 # File Organizer - 文件自动分类技能
 
-智能文件分类系统，支持**单项目**和**多项目**两种组织模式。
+为**新建项目**和**新建文件**提供目录结构设计建议和分类指导。
+
+## ⚠️ 重要提示（给 OpenClaw AI 助手）
+
+### 使用范围
+
+本技能主要用于以下场景：
+- ✅ **用户要创建新项目** - 提供推荐的目录结构设计
+- ✅ **用户新建单个/少量文件** - 建议放置位置
+- ✅ **用户主动要求整理工作区** - 执行分类操作
+
+**以下场景需要特别注意：**
+
+### 🚨 处理外部项目时的警告流程
+
+当用户通过以下方式引入外部项目时：
+- `git clone` 克隆的仓库
+- 下载并解压的压缩包
+- 从其他位置复制/移动过来的完整项目
+- 第三方提供的项目文件
+
+**必须执行以下步骤：**
+
+1. **暂停并提醒用户**
+   ```
+   ⚠️ 检测到这是一个完整的外部项目，具有自己的目录结构。
+
+   当前项目结构：
+   - src/ (源代码)
+   - tests/ (测试文件)
+   - docs/ (文档)
+   - README.md
+
+   是否要重新组织这个项目的目录结构？
+
+   [注意] 重新组织可能会：
+   - 破坏项目的相对路径引用
+   - 影响构建脚本和工具配置
+   - 导致版本控制混乱
+
+   请选择：
+   1. 保持原样（推荐）
+   2. 仅对新文件使用此结构
+   3. 全面重组（有风险，需备份）
+   ```
+
+2. **如果用户选择重组，必须：**
+   - 创建完整的操作日志（用于回滚）
+   - 预览即将执行的所有操作
+   - 确认用户明确同意
+
+3. **执行前创建回滚记录**
+   ```bash
+   # 记录当前文件位置
+   find . -type f > ~/.file-organizer/backup/$(date +%Y%m%d_%H%M%S)_before_organize.txt
+   ```
+
+### 📝 操作记录要求
+
+**所有文件移动操作必须记录：**
+
+```bash
+# 标准日志格式
+# 时间戳 | 操作类型 | 源路径 | 目标路径 | 文件哈希
+
+# 示例
+2026-03-14_14:30:15 | MOVE | ./script.py | ./scripts/python/script.py | a1b2c3d4
+2026-03-14_14:30:16 | MOVE | ./config.json | ./configs/config.json | e5f6g7h8
+```
+
+**回滚脚本生成：**
+
+每次整理完成后，自动生成回滚脚本：
+
+```bash
+# 生成回滚命令
+echo "#!/bin/bash" > ~/.file-organizer/rollback/rollback_20260314_143015.sh
+echo "# 回滚脚本 - 生成时间: 2026-03-14 14:30:15" >> ~/.file-organizer/rollback/rollback_20260314_143015.sh
+echo "mv ./scripts/python/script.py ./script.py" >> ~/.file-organizer/rollback/rollback_20260314_143015.sh
+chmod +x ~/.file-organizer/rollback/rollback_20260314_143015.sh
+```
 
 ## 何时使用
 
-✅ **使用此技能的场景：**
+✅ **推荐使用：**
 
-- 创建新文件时自动分类
-- 同时管理多个项目的文件
-- 项目之间文件隔离与组织
-- 截图/图片文件归档
-- Python/Node.js 脚本整理
-- 工作区定期清理
+- **创建全新项目** - "我要开始一个新项目，帮我设计目录结构"
+- **新建零散文件** - "我新建了几个脚本文件，应该放哪里"
+- **主动整理请求** - "帮我整理一下这个工作区"
+- **规划项目结构** - "给这个项目推荐一个目录组织方式"
 
-❌ **不使用此技能的场景：**
+❌ **不推荐/需谨慎：**
 
-- 系统文件管理
-- 版本控制中的文件重命名
-- 临时文件快速查看
+- **已有完整结构的项目** - 如通过 git clone 获得的项目
+- **团队协作项目** - 除非所有成员同意
+- **生产环境代码** - 避免影响运行中的系统
 
 ## 核心概念
 
+### 本技能的设计原则
+
+**"新建即正确"** - 在创建时就提供建议，而不是事后整理。
+
+#### 对比说明
+
+| 场景 | 本技能处理方式 | 示例 |
+|------|--------------|------|
+| 用户说"我要创建一个新项目" | ✅ 主动推荐目录结构 | "建议创建以下目录：scripts/, configs/, ..." |
+| 用户说"这个文件放哪" | ✅ 给出具体放置建议 | "这是一个Python脚本，建议放到 scripts/python/" |
+| 用户说"帮我整理这个目录" | ⚠️ 先询问、记录、再执行 | 生成预览 → 确认 → 执行 → 提供回滚 |
+| 检测到完整的外部项目 | ❌ 警告并询问 | "这是一个已有结构的项目，是否保持原样？" |
+
 ### 两种组织模式
 
-#### 模式一：类型优先（适合单项目）
+#### 模式一：类型优先（适合新建单项目）
 
-所有文件按**类型**分类，适合单个项目的工作区：
+所有文件按**类型**分类：
 
 ```
-workspace/
-├── screenshots/          # 所有截图
+my-new-project/          <- 用户创建的新项目
+├── screenshots/         # 截图和图片
 ├── scripts/
-│   ├── python/          # Python 脚本
-│   ├── node/            # Node.js 脚本
-│   └── shell/           # Shell 脚本
-├── configs/             # 配置文件
-├── output/              # 报告和文档
-├── temp/                # 临时文件
-└── utils/               # 工具函数
+│   ├── python/         # Python 脚本
+│   ├── node/           # Node.js 脚本
+│   └── shell/          # Shell 脚本
+├── configs/            # 配置文件
+├── output/             # 输出文档
+├── temp/               # 临时文件
+└── docs/               # 项目文档
 ```
 
-#### 模式二：项目优先（适合多项目）
+#### 模式二：项目优先（适合管理多个新建项目）
 
-文件先按**项目**分类，再按类型分类，适合同时开发多个项目：
+文件先按**项目**分类：
 
 ```
 projects/
-├── ProjectA/
+├── NewProjectA/        <- 用户创建的新项目A
 │   ├── screenshots/
 │   ├── scripts/
 │   ├── configs/
 │   └── output/
-├── ProjectB/
+├── NewProjectB/        <- 用户创建的新项目B
 │   ├── screenshots/
 │   ├── scripts/
 │   ├── configs/
 │   └── output/
-└── shared/              # 跨项目共享文件
-    ├── scripts/
-    └── configs/
+└── shared/             # 共享资源
 ```
-
-### 智能项目检测
-
-自动检测当前目录是否为项目根目录：
-
-| 检测标志 | 说明 |
-|---------|------|
-| `.git/` | Git 仓库根目录 |
-| `package.json` | Node.js 项目 |
-| `requirements.txt` / `pyproject.toml` | Python 项目 |
-| `README.md` | 项目说明文件 |
-| `src/` 或 `source/` | 源代码目录 |
 
 ## 命令示例
 
-### 模式切换与配置
+### 场景1：用户要创建新项目
 
-```bash
-# 设置组织模式为"项目优先"
-export FILE_ORGANIZER_MODE=project
+```python
+# 推荐对话流程：
+# 用户："我要开始一个新的数据分析项目"
+# OpenClaw："好的，建议为您的数据分析项目创建以下目录结构："
 
-# 设置项目根目录（默认当前目录）
-export FILE_ORGANIZER_ROOT=~/projects
-
-# 设置类型优先模式的目录结构
-export FILE_ORGANIZER_TYPE_DIRS="screenshots,scripts/python,scripts/node,configs,output,temp"
-```
-
-### 项目优先模式 - 初始化项目结构
-
-```bash
-# 创建新项目并初始化目录结构
 python3 << 'EOF'
 import os
 from pathlib import Path
 
-project_name = input("Enter project name: ")
-base_dir = Path(os.environ.get("FILE_ORGANIZER_ROOT", "~/projects")).expanduser()
-project_dir = base_dir / project_name
+project_name = "data-analysis-project"  # 用户提供
+base_dir = Path.home() / "projects" / project_name
 
-# 创建项目目录结构
+# 推荐的数据分析项目结构
 dirs = [
-    "screenshots",
-    "scripts/python",
-    "scripts/node",
-    "scripts/shell",
-    "configs",
-    "output",
-    "temp",
-    "docs",
-    "assets"
+    "data/raw",           # 原始数据
+    "data/processed",     # 处理后数据
+    "notebooks",          # Jupyter notebooks
+    "scripts/python",     # Python 处理脚本
+    "scripts/sql",        # SQL 查询
+    "configs",            # 配置文件
+    "output/reports",     # 分析报告
+    "output/visualizations",  # 可视化图表
+    "docs",               # 文档
 ]
 
+print(f"📁 建议的目录结构：{project_name}/")
 for d in dirs:
-    (project_dir / d).mkdir(parents=True, exist_ok=True)
-    print(f"✓ Created: {project_name}/{d}/")
+    print(f"   ├── {d}/")
 
-# 创建项目 README
-readme_content = f"""# {project_name}
-
-## Directory Structure
-
-- `screenshots/` - Screenshots and images
-- `scripts/` - Executable scripts (python, node, shell)
-- `configs/` - Configuration files
-- `output/` - Generated reports and documents
-- `temp/` - Temporary files (auto-cleaned)
-- `docs/` - Documentation
-- `assets/` - Project assets
-
-## Auto-Organization
-
-Files are automatically organized based on type and extension.
-"""
-
-(project_dir / "README.md").write_text(readme_content)
-print(f"\n✓ Project '{project_name}' initialized at {project_dir}")
+response = input("\n是否创建这个目录结构？(y/n): ")
+if response.lower() == 'y':
+    for d in dirs:
+        (base_dir / d).mkdir(parents=True, exist_ok=True)
+    print(f"\n✓ 已创建项目：{base_dir}")
 EOF
 ```
 
-### 项目优先模式 - 文件分类
+### 场景2：用户新建文件询问位置
 
-```bash
-# 将文件分类到指定项目
-python3 << 'EOF'
-import os
-import shutil
-from pathlib import Path
+```python
+# 推荐对话流程：
+# 用户："我新建了一个 config.yaml，应该放哪里？"
+# OpenClaw："根据文件类型，建议放置位置如下："
 
-# 配置
-base_dir = Path(os.environ.get("FILE_ORGANIZER_ROOT", "~/projects")).expanduser()
-project_name = input("Enter target project name: ")
-project_dir = base_dir / project_name
+filename = "config.yaml"  # 用户提供
 
-if not project_dir.exists():
-    print(f"Error: Project '{project_name}' not found at {project_dir}")
-    exit(1)
-
-# 分类规则（与类型优先模式相同，但目标在项目目录内）
-rules = {
-    'screenshots': ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg'],
-    'scripts/python': ['.py', '.ipynb'],
-    'scripts/node': ['.js', '.ts', '.jsx', '.tsx', '.mjs'],
-    'scripts/shell': ['.sh', '.ps1', '.bash', '.zsh'],
-    'configs': ['.json', '.yaml', '.yml', '.toml', '.ini', '.conf'],
-    'output': ['.md', '.pdf', '.docx', '.txt', '.log'],
-    'assets': ['.ico', '.woff', '.ttf', '.eot'],
-    'temp': ['.tmp', '.cache', '.bak'],
+# 自动识别文件类型并给出建议
+file_type_map = {
+    '.yaml': ('configs/', '配置文件'),
+    '.json': ('configs/', '配置文件'),
+    '.py': ('scripts/python/', 'Python脚本'),
+    '.js': ('scripts/node/', 'Node.js脚本'),
+    '.sh': ('scripts/shell/', 'Shell脚本'),
+    '.png': ('screenshots/', '图片文件'),
+    '.md': ('docs/', '文档'),
 }
 
-# 分类当前目录的文件
+ext = filename.split('.')[-1] if '.' in filename else ''
+if f'.{ext}' in file_type_map:
+    folder, desc = file_type_map[f'.{ext}']
+    print(f"📄 {filename} ({desc})")
+    print(f"   建议位置: {folder}{filename}")
+    print(f"   理由: 这是{desc}，统一放在{folder}便于管理")
+else:
+    print(f"未识别的文件类型，建议询问用户")
+```
+
+### 场景3：用户主动要求整理（带完整记录）
+
+```bash
+# 完整流程：询问 → 预览 → 确认 → 执行 → 记录 → 提供回滚
+
+python3 << 'EOF'
+import os
+import json
+import shutil
+from pathlib import Path
+from datetime import datetime
+
+# 步骤1：询问确认
+print("⚠️  您确定要整理当前目录吗？")
+print("这将移动文件到新的位置。")
+response = input("继续？(yes/no/preview): ")
+
+if response == 'preview':
+    preview_only = True
+elif response == 'yes':
+    preview_only = False
+else:
+    print("已取消")
+    exit()
+
+# 步骤2：生成操作日志ID
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+log_dir = Path.home() / '.file-organizer' / 'logs'
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / f"organize_{timestamp}.json"
+
+# 步骤3：分析并预览
+operations = []
+rules = {
+    'screenshots': ['.png', '.jpg', '.jpeg', '.gif'],
+    'scripts/python': ['.py', '.ipynb'],
+    'scripts/node': ['.js', '.ts'],
+    'configs': ['.json', '.yaml', '.yml'],
+    'docs': ['.md', '.txt'],
+}
+
 for file in os.listdir('.'):
     if os.path.isfile(file):
         ext = Path(file).suffix.lower()
         for folder, extensions in rules.items():
             if ext in extensions:
-                target_dir = project_dir / folder
-                target_dir.mkdir(parents=True, exist_ok=True)
-                shutil.move(file, target_dir / file)
-                print(f"✓ {file} → {project_name}/{folder}/")
+                operations.append({
+                    'action': 'MOVE',
+                    'source': f'./{file}',
+                    'target': f'./{folder}/{file}',
+                    'timestamp': timestamp
+                })
                 break
 
-print(f"\n✓ Files organized to project '{project_name}'")
+# 步骤4：显示预览
+print(f"\n📋 即将执行的操作（共{len(operations)}个）：")
+for op in operations:
+    print(f"   {op['source']} → {op['target']}")
+
+if preview_only:
+    print("\n[预览模式，未执行任何操作]")
+    exit()
+
+# 步骤5：再次确认
+confirm = input("\n确认执行？(输入 'organize' 确认): ")
+if confirm != 'organize':
+    print("已取消")
+    exit()
+
+# 步骤6：执行并记录
+for op in operations:
+    src = Path(op['source'])
+    tgt = Path(op['target'])
+    tgt.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(tgt))
+    print(f"✓ {op['source']} → {op['target']}")
+
+# 步骤7：保存日志
+with open(log_file, 'w') as f:
+    json.dump(operations, f, indent=2)
+
+# 步骤8：生成回滚脚本
+rollback_script = log_dir / f"rollback_{timestamp}.sh"
+with open(rollback_script, 'w') as f:
+    f.write("#!/bin/bash\n")
+    f.write(f"# 回滚脚本 - 生成时间: {timestamp}\n")
+    f.write(f"# 日志文件: {log_file}\n\n")
+    for op in reversed(operations):  # 逆序回滚
+        f.write(f'mv "{op["target"]}" "{op["source"]}"\n')
+    f.write('\necho "✓ 回滚完成"\n')
+os.chmod(rollback_script, 0o755)
+
+print(f"\n✅ 整理完成！")
+print(f"📄 操作日志: {log_file}")
+print(f"↩️  回滚脚本: {rollback_script}")
+print(f"\n如需回滚，运行: bash {rollback_script}")
 EOF
 ```
 
-### 自动检测项目并分类
+### 场景4：检测到外部项目时的处理
 
-```bash
-# 智能分类 - 根据当前目录自动判断项目
+```python
+# 当检测到可能的外部项目时，必须执行的检查流程
+
 python3 << 'EOF'
 import os
-import shutil
 from pathlib import Path
 
-def find_project_root(path='.'):
-    """向上查找项目根目录（包含 .git 的目录）"""
-    current = Path(path).resolve()
-    while current != current.parent:
-        if (current / '.git').exists() or \
-           (current / 'package.json').exists() or \
-           (current / 'requirements.txt').exists() or \
-           (current / 'pyproject.toml').exists():
-            return current
-        current = current.parent
-    return None
+# 检测外部项目的标志
+EXTERNAL_PROJECT_INDICATORS = [
+    '.git',              # Git仓库
+    'package.json',      # Node.js项目
+    'requirements.txt',  # Python项目
+    'Cargo.toml',        # Rust项目
+    'go.mod',            # Go项目
+    'pom.xml',           # Maven项目
+    'build.gradle',      # Gradle项目
+    'Makefile',
+    'CMakeLists.txt',
+]
 
-def organize_file(file_path, project_root=None):
-    """将文件分类到正确位置"""
-    file_path = Path(file_path)
-    ext = file_path.suffix.lower()
+def check_external_project(path='.'):
+    """检查是否为外部引入的完整项目"""
+    indicators_found = []
+    for indicator in EXTERNAL_PROJECT_INDICATORS:
+        if (Path(path) / indicator).exists():
+            indicators_found.append(indicator)
+    return indicators_found
 
-    rules = {
-        'screenshots': ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg'],
-        'scripts/python': ['.py', '.ipynb'],
-        'scripts/node': ['.js', '.ts', '.jsx', '.tsx', '.mjs'],
-        'scripts/shell': ['.sh', '.ps1', '.bash', '.zsh'],
-        'configs': ['.json', '.yaml', '.yml', '.toml', '.ini', '.conf'],
-        'output': ['.md', '.pdf', '.docx', '.txt', '.log'],
-        'temp': ['.tmp', '.cache', '.bak'],
-    }
+# 执行检查
+indicators = check_external_project()
 
-    # 确定目标目录
-    if project_root:
-        base_dir = project_root
-        print(f"Detected project: {project_root.name}")
+if indicators:
+    print("🚨 检测到外部项目标志：")
+    for ind in indicators:
+        print(f"   - {ind}")
+
+    print("\n⚠️  警告：这是一个可能来自外部的完整项目，具有自己的目录结构。")
+    print("\n选项：")
+    print("1. 保持原样（推荐）- 不修改目录结构")
+    print("2. 仅对新文件应用建议结构")
+    print("3. 全面重组 - 需要创建完整备份")
+
+    choice = input("\n请选择 (1/2/3): ")
+
+    if choice == '1':
+        print("✓ 保持项目原样。如需新建文件，我将单独建议存放位置。")
+    elif choice == '2':
+        print("✓ 仅对新文件应用分类。现有文件保持不动。")
+    elif choice == '3':
+        print("⚠️  您选择了全面重组。正在创建完整备份...")
+        # 创建备份...
     else:
-        base_dir = Path('.')
-        print("No project detected, using current directory")
-
-    # 执行分类
-    for folder, extensions in rules.items():
-        if ext in extensions:
-            target_dir = base_dir / folder
-            target_dir.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(file_path), str(target_dir / file_path.name))
-            print(f"✓ {file_path.name} → {target_dir.relative_to('.')}/")
-            return True
-
-    print(f"✗ No rule for: {file_path.name}")
-    return False
-
-# 使用示例
-file_to_organize = input("Enter file path (or '.' for all files): ")
-
-if file_to_organize == '.':
-    # 分类当前目录所有文件
-    project_root = find_project_root()
-    for f in os.listdir('.'):
-        if os.path.isfile(f):
-            organize_file(f, project_root)
+        print("默认保持原样。")
 else:
-    # 分类单个文件
-    project_root = find_project_root(os.path.dirname(file_to_organize) or '.')
-    organize_file(file_to_organize, project_root)
+    print("✓ 未检测到外部项目标志，可以安全地提供目录建议。")
 EOF
 ```
 
-### 跨项目文件移动
+## 团队协作最佳实践
+
+### 项目模板创建
 
 ```bash
-# 将文件从一个项目移动到另一个项目
-python3 << 'EOF'
-import os
-import shutil
-from pathlib import Path
+# 为新项目创建标准模板
+mkdir -p ~/templates/standard-project
+cd ~/templates/standard-project
 
-base_dir = Path(os.environ.get("FILE_ORGANIZER_ROOT", "~/projects")).expanduser()
+mkdir -p {screenshots,scripts/{python,node,shell},configs,output,temp,docs}
 
-# 列出所有项目
-print("Available projects:")
-for i, proj in enumerate(base_dir.iterdir(), 1):
-    if proj.is_dir():
-        print(f"  {i}. {proj.name}")
+cat > README.md << 'EOF'
+# {{PROJECT_NAME}}
 
-source_project = input("\nSource project: ")
-target_project = input("Target project: ")
-filename = input("File to move: ")
+## 目录结构说明
 
-source = base_dir / source_project / filename
-target = base_dir / target_project / filename
+本项目使用 file-organizer 推荐的目录结构：
 
-if source.exists():
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(source), str(target))
-    print(f"✓ Moved: {source_project}/{filename} → {target_project}/{filename}")
-else:
-    print(f"✗ File not found: {source}")
-EOF
-```
+- `screenshots/` - 截图和图片文件
+- `scripts/` - 可执行脚本
+- `configs/` - 配置文件
+- `output/` - 输出文档和报告
+- `temp/` - 临时文件（可自动清理）
+- `docs/` - 项目文档
 
-### 项目间文件去重
+## 文件存放指南
 
-```bash
-# 在所有项目中查找重复文件
-python3 << 'EOF'
-import os
-import hashlib
-from pathlib import Path
-from collections import defaultdict
-
-def file_hash(filepath):
-    hasher = hashlib.md5()
-    with open(filepath, 'rb') as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
-
-base_dir = Path(os.environ.get("FILE_ORGANIZER_ROOT", "~/projects")).expanduser()
-
-# 收集所有文件的哈希
-hashes = defaultdict(list)
-
-for project_dir in base_dir.iterdir():
-    if project_dir.is_dir():
-        for root, _, files in os.walk(project_dir):
-            for filename in files:
-                filepath = Path(root) / filename
-                try:
-                    h = file_hash(filepath)
-                    hashes[h].append((project_dir.name, filepath.relative_to(project_dir)))
-                except:
-                    pass
-
-# 显示跨项目重复
-print("Cross-project duplicates:")
-for h, locations in hashes.items():
-    if len(locations) > 1:
-        projects = set(loc[0] for loc in locations)
-        if len(projects) > 1:  # 只在不同项目间重复
-            print(f"\nHash: {h[:8]}...")
-            for proj, path in locations:
-                print(f"  - [{proj}] {path}")
+新建文件时，根据文件类型放入对应目录。
 EOF
 ```
 
 ## 注意事项
 
-- **项目隔离**：确保不同项目的文件不会混淆
-- **默认项目**：无法确定项目时，使用 `misc` 或 `inbox` 作为临时存放
-- **跨项目共享**：公共资源放在 `shared/` 或专门的共享项目
-- **备份策略**：多项目模式下，建议按项目分别备份
-- **命名规范**：项目名称使用小写字母和连字符，避免空格
+- **本技能是辅助工具** - 提供建议，最终决策权在用户
+- **优先保护现有结构** - 对外来项目保持谨慎
+- **记录一切变更** - 确保可以回滚
+- **明确沟通** - 让用户清楚知道将要发生什么
 
 ## 故障排除
 
-### 项目检测失败
+### 回滚操作
 
 ```bash
-# 手动指定项目
-export FILE_ORGANIZER_PROJECT=my-project
-organize file.txt
+# 如果整理后出现问题，执行回滚
+bash ~/.file-organizer/logs/rollback_YYYYMMDD_HHMMSS.sh
 ```
 
-### 权限问题
+### 查看历史操作
 
 ```bash
-# 修复项目目录权限
-chmod -R u+w ~/projects/
-```
+# 列出所有整理记录
+ls -la ~/.file-organizer/logs/
 
-### 文件冲突
-
-```bash
-# 重命名冲突文件
-mv file.txt "file_$(date +%Y%m%d_%H%M%S).txt"
+# 查看具体操作
+cat ~/.file-organizer/logs/organize_YYYYMMDD_HHMMSS.json
 ```
