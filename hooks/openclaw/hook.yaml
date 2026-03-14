@@ -1,0 +1,253 @@
+# OpenClaw Hook 配置
+# File Organizer Skill - 文件自动分类钩子
+#
+# 本配置定义了在哪些场景下触发文件分类技能
+# 支持两种模式：
+# 1. 用户显式触发（询问确认）
+# 2. OpenClaw 自动触发（直接执行）
+
+version: "1.0.0"
+skill_name: file-organizer
+
+hooks:
+  # ============================================
+  # Hook 1: 用户显式创建请求（询问确认模式）
+  # ============================================
+  # 当用户明确说出"创建文件/文件夹"时触发
+  # 特点：提供建议，等待用户确认后再执行
+  UserExplicitCreate:
+    enabled: true
+    priority: high  # 优先处理用户明确请求
+
+    triggers:
+      # 中文触发词
+      - pattern: "创建.*文件|新建.*文件|生成.*文件"
+        language: zh
+      - pattern: "创建.*文件夹|新建.*目录|创建.*目录|mkdir"
+        language: zh
+      - pattern: "文件.*放哪里|保存.*哪里|存到.*哪里"
+        language: zh
+      - pattern: "整理.*工作区|整理.*目录|organize"
+        language: zh
+
+      # 英文触发词
+      - pattern: "create.*file|new file|generate file"
+        language: en
+      - pattern: "create.*folder|create.*directory|mkdir"
+        language: en
+      - pattern: "where.*save|where.*put"
+        language: en
+      - pattern: "organize.*workspace|organize.*files"
+        language: en
+
+    action: suggest_with_confirm
+
+    behavior:
+      auto_execute: false           # 不自动执行，等待确认
+      show_alternatives: true       # 显示备选方案
+      explain_reasoning: true       # 解释分类理由
+      allow_override: true          # 允许用户覆盖建议
+
+    prompt_template: |
+      用户想要创建文件/文件夹：{{filename}}
+
+      请根据 SKILL.md 中的规则：
+      1. 分析文件类型
+      2. 推荐最佳目录位置
+      3. 提供命名建议
+      4. 等待用户确认后再执行
+
+      输出格式使用「建议模式」格式。
+
+  # ============================================
+  # Hook 2: OpenClaw 自动创建（自动分类模式）
+  # ============================================
+  # 当 OpenClaw 自主决定创建文件时触发
+  # 特点：自动分类，直接执行，记录日志
+  AgentAutoCreate:
+    enabled: true
+    priority: normal
+
+    triggers:
+      - event: agent_file_create       # OpenClaw 生成代码文件
+      - event: agent_file_write        # OpenClaw 写入文件
+      - event: agent_download_save     # OpenClaw 下载并保存文件
+      - event: agent_generate_output   # OpenClaw 生成输出文件
+
+    action: auto_classify
+
+    behavior:
+      auto_execute: true              # 自动执行，无需询问
+      log_all_operations: true        # 记录所有操作
+      notify_on_auto_classify: true   # 执行后通知用户
+
+    classification_rules:
+      # 规则1: 如果目标路径已明确且符合规则，直接创建
+      - condition: "target_path_explicit AND path_matches_rule"
+        action: "create_at_target"
+
+      # 规则2: 如果目标路径不明确，自动选择最合适的目录
+      - condition: "target_path_unclear"
+        action: "auto_select_directory"
+        confidence_threshold: 0.7       # 置信度>0.7才自动执行
+
+      # 规则3: 如果路径冲突，自动重命名
+      - condition: "path_conflict"
+        action: "auto_rename_with_timestamp"
+
+      # 规则4: 低置信度时降级到建议模式
+      - condition: "confidence < 0.7"
+        action: "fallback_to_suggest_mode"
+
+    exclude_patterns:                 # 不自动分类的例外情况
+      - "*.tmp"                       # 临时文件保持原样
+      - "*.temp"
+      - ".git/**"                     # Git 内部文件
+      - "node_modules/**"
+      - "__pycache__/**"
+
+    prompt_template: |
+      OpenClaw 自动创建文件：{{filename}}
+
+      执行自动分类：
+      1. 快速识别文件类型（基于扩展名和内容）
+      2. 查询分类规则
+      3. 确定目标目录（置信度>{{confidence_threshold}}）
+      4. 直接执行移动/创建
+      5. 记录操作日志
+
+      输出格式使用「自动分类模式」格式。
+
+  # ============================================
+  # Hook 3: 文件写入前验证（预处理）
+  # ============================================
+  # 在所有文件写入前执行，确保目录存在
+  BeforeFileWrite:
+    enabled: true
+    priority: high  # 高优先级，先执行
+
+    triggers:
+      - event: before_file_write
+
+    action: validate_and_prepare
+
+    behavior:
+      auto_create_parent_dirs: true   # 自动创建父目录
+      check_permissions: true         # 检查权限
+      never_block_write: true         # 从不阻止写入，只做准备
+
+    rules:
+      # 确保目标目录存在
+      - action: "ensure_directory_exists"
+        create_if_missing: true
+
+      # 检查是否为外部项目（警告但不阻止）
+      - action: "detect_external_project"
+        warn_if_true: true
+        log_detection: true
+
+  # ============================================
+  # Hook 4: 外部项目检测（警告模式）
+  # ============================================
+  # 当检测到可能的外部项目时触发
+  ExternalProjectDetect:
+    enabled: true
+    priority: high
+
+    triggers:
+      - event: directory_scan
+      - event: workspace_init
+      - pattern: "git clone|下载.*项目|解压.*项目"
+
+    action: detect_and_warn
+
+    behavior:
+      auto_execute: false           # 必须询问
+      require_explicit_confirm: true # 需要明确确认
+      create_backup_plan: true      # 提供备份方案
+
+    detection_indicators:
+      # 外部项目标志
+      files:
+        - ".git"                   # Git 仓库
+        - "LICENSE"                # 开源许可证
+        - "README.md"              # 项目说明
+        - "package.json"           # Node.js 项目
+        - "requirements.txt"       # Python 项目
+        - "Cargo.toml"             # Rust 项目
+        - "go.mod"                 # Go 项目
+        - "pom.xml"                # Maven 项目
+        - "build.gradle"           # Gradle 项目
+
+      # 检测阈值：发现2个以上标志视为外部项目
+      threshold: 2
+
+    prompt_template: |
+      ⚠️  检测到可能的外部项目！
+
+      发现以下项目标志：{{indicators_found}}
+
+      这是一个可能来自外部的完整项目，具有自己的目录结构。
+      自动重组可能会：
+      - 破坏项目的相对路径引用
+      - 影响构建脚本和工具配置
+      - 导致版本控制混乱
+
+      请选择：
+      [1] 保持原样（推荐）- 不修改目录结构
+      [2] 仅对新文件使用分类 - 现有文件保持不动
+      [3] 全面重组（有风险）- 创建完整备份后执行
+
+# ============================================
+# 全局配置
+# ============================================
+global_config:
+  # 运行模式
+  mode: balanced  # conservative | balanced | aggressive
+
+  # 日志配置
+  logging:
+    enabled: true
+    log_dir: "~/.openclaw/skills/file-organizer/logs"
+    format: json
+    retention_days: 30
+
+  # 自动分类阈值
+  thresholds:
+    high_confidence: 0.8      # 高置信度：直接自动执行
+    medium_confidence: 0.7    # 中置信度：自动执行但通知
+    low_confidence: 0.5       # 低置信度：降级到建议模式
+
+  # 通知配置
+  notifications:
+    on_auto_classify: true    # 自动分类后通知
+    on_suggestion: true       # 提供建议时通知
+    on_warning: true          # 警告时通知
+    summary_on_batch: true    # 批量操作时提供摘要
+
+# ============================================
+# 模式定义
+# ============================================
+modes:
+  conservative:
+    name: "保守模式"
+    description: "所有操作都询问确认"
+    auto_classify: false
+    confirm_before_move: true
+    confirm_on_external: true
+
+  balanced:
+    name: "平衡模式"
+    description: "自动分类新建文件，移动现有文件时询问"
+    auto_classify: true
+    confirm_before_move: true
+    confirm_on_external: true
+    confidence_threshold: 0.7
+
+  aggressive:
+    name: "积极模式"
+    description: "最大程度自动执行"
+    auto_classify: true
+    confirm_before_move: false
+    confirm_on_external: false
+    confidence_threshold: 0.5
