@@ -1,6 +1,6 @@
 ---
 name: file-organizer
-description: "文件自动分类 - 支持新建项目的目录设计、文件分类建议。主要用途：创建新项目时提供目录结构指导、新建文件时自动分类、工作区整理建议。"
+description: "文件自动分类。Use when: (1) 用户创建新项目，(2) 用户询问文件放哪里，(3) 用户主动要求整理工作区，(4) OpenClaw 自动生成/下载文件时，(5) 检测到外部引入的完整项目。主要用途：目录结构设计、文件自动分类、工作区整理。"
 homepage: https://github.com/Guic3136/openclaw-skills/tree/main/skills/file-organizer
 metadata:
   openclaw:
@@ -8,11 +8,181 @@ metadata:
     requires:
       bins: ["python3", "mv", "mkdir"]
     tags: ["productivity", "file-management", "organization", "project-management"]
+    hooks:
+      config: hooks/openclaw/hook.yaml
+      triggers:
+        - user_explicit_create
+        - agent_auto_create
+        - before_file_write
+        - external_project_detect
 ---
 
 # File Organizer - 文件自动分类技能
 
-为**新建项目**和**新建文件**提供目录结构设计建议和分类指导。
+为**新建项目**和**新建文件**提供目录结构设计建议和自动分类。
+
+## 运行模式
+
+本技能支持两种运行模式，根据触发场景自动选择：
+
+### 模式1：建议模式（用户显式触发）
+
+**触发条件：**
+- 用户说"我要创建一个新项目"
+- 用户问"这个文件应该放哪里"
+- 用户说"帮我整理工作区"
+
+**行为特征：**
+- 分析文件类型和项目结构
+- 提供详细的分类建议
+- **等待用户确认后再执行**
+- 显示理由和备选方案
+
+### 模式2：自动分类模式（OpenClaw 自动触发）
+
+**触发条件：**
+- OpenClaw 自动生成代码文件
+- OpenClaw 下载并保存资源
+- OpenClaw 写入配置文件
+- OpenClaw 生成输出文档
+
+**行为特征：**
+- 自动识别文件类型
+- 直接选择最佳目录
+- **自动执行，无需询问**
+- 执行后通知用户结果
+
+### 模式配置
+
+通过配置控制自动分类的激进程度：
+
+```yaml
+# ~/.openclaw/config/file-organizer.yaml
+mode: balanced  # conservative | balanced | aggressive
+
+conservative:  # 保守模式
+  auto_classify: false
+  confirm_before_move: true
+
+balanced:      # 平衡模式（默认）
+  auto_classify: true
+  confirm_before_move: true
+  confidence_threshold: 0.7
+
+aggressive:    # 积极模式
+  auto_classify: true
+  confirm_before_move: false
+  confidence_threshold: 0.5
+```
+
+## Quick Reference
+
+| 场景 | 触发信号 | 模式 | 处理方式 |
+|------|---------|------|---------|
+| 创建新项目 | "开始新项目" / "create project" | 建议模式 | 推荐目录结构 → 询问确认 |
+| 询问文件位置 | "放哪里" / "where to save" | 建议模式 | 分析类型 → 建议位置 → 等待确认 |
+| 整理工作区 | "整理" / "organize" | 建议模式 | 预览 → 确认 → 执行 → 记录 |
+| OpenClaw 生成文件 | `agent_file_create` 事件 | 自动模式 | 识别类型 → 直接分类 → 通知 |
+| OpenClaw 下载文件 | `agent_download_save` 事件 | 自动模式 | 按类型放入对应目录 |
+| 外部项目检测 | 发现 .git/package.json 等 | 警告模式 | 警告 → 询问 → 可选保持原样 |
+
+## 响应格式标准
+
+根据运行模式，使用不同的输出格式：
+
+### 格式A：建议模式（用户显式触发）
+
+用于：用户询问"放哪里"、"怎么组织"
+
+```
+📋 文件分类建议
+━━━━━━━━━━━━━━━━━━━
+📄 文件: script.py
+📁 建议位置: scripts/python/
+📝 命名: data_processor.py
+
+💡 理由: Python脚本按功能分类到 scripts/python/ 便于管理
+       符合 organization-rules.json 中的 python_scripts 规则
+
+📋 操作选项:
+[1] ✅ 接受 - 创建到 scripts/python/data_processor.py
+[2] ✏️  修改 - 告诉我您的偏好
+[3] ❌ 取消 - 保持当前位置
+```
+
+### 格式B：自动分类模式（OpenClaw 自动触发）
+
+用于：OpenClaw 自主创建文件
+
+```
+📁 自动分类
+━━━━━━━━━━━━━━━━━━━
+✓ script.py → scripts/python/data_processor.py
+  规则: python_scripts
+  置信度: 0.92
+  时间: 2026-03-14 14:30:15
+
+[已自动执行，无需确认]
+```
+
+### 格式C：批量自动分类
+
+用于：一次创建多个文件
+
+```
+📦 批量自动分类（5个文件）
+━━━━━━━━━━━━━━━━━━━
+✓ script.py         → scripts/python/    (置信度: 0.92)
+✓ config.json       → configs/           (置信度: 0.88)
+✓ screenshot.png    → screenshots/       (置信度: 0.95)
+✓ data.csv          → data/raw/          (置信度: 0.85)
+⚠️  unknown.xyz      → misc/              (类型未知)
+
+[全部自动执行完成]
+点击展开查看详细信息...
+```
+
+### 格式D：警告模式（外部项目）
+
+用于：检测到外部引入的完整项目
+
+```
+⚠️  检测到外部项目结构
+━━━━━━━━━━━━━━━━━━━
+发现以下项目标志:
+   - .git/ (Git仓库)
+   - package.json (Node.js项目)
+   - README.md (项目说明)
+
+这是一个可能来自外部的完整项目，具有自己的目录结构。
+自动重组可能破坏现有结构。
+
+请选择:
+[1] 🏠 保持原样（推荐）- 不修改目录结构，仅对新文件分类
+[2] 📝 仅对新文件应用 - 现有文件保持不动
+[3] ⚠️  全面重组（有风险）- 创建完整备份后执行重组
+```
+
+### 格式E：操作日志
+
+用于：记录每次分类操作
+
+```
+📄 操作记录
+━━━━━━━━━━━━━━━━━━━
+ID: ORG-20260314-001
+时间: 2026-03-14 14:30:15
+操作: MOVE
+源路径: ./script.py
+目标路径: ./scripts/python/data_processor.py
+规则: python_scripts
+模式: 自动分类
+置信度: 0.92
+状态: 已完成
+
+回滚命令:
+  mv ./scripts/python/data_processor.py ./script.py
+```
 
 ## ⚠️ 重要提示（给 OpenClaw AI 助手）
 
