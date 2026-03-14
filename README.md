@@ -16,6 +16,22 @@ OpenClaw AI 助手技能库，提供文件自动分类等生产力工具。
 
 ### 安装技能
 
+#### 方式一：让 OpenClaw 自动安装（推荐）
+
+直接把本仓库的 GitHub 地址告诉 OpenClaw，让它自己安装：
+
+```
+安装这个技能：https://github.com/Guic3136/openclaw-skills
+```
+
+或者指定具体技能：
+
+```
+从 https://github.com/Guic3136/openclaw-skills 安装 file-organizer 技能
+```
+
+#### 方式二：手动复制
+
 OpenClaw 使用基于目录的技能系统。安装技能只需将技能目录复制到 OpenClaw 的技能目录：
 
 ```bash
@@ -125,15 +141,6 @@ git add skills/my-skill
 git commit -m "Add skill: my-skill v1.0.0"
 git push
 ```
-
-## 与 Claude Code 技能的区别
-
-| 特性 | OpenClaw 技能 | Claude Code 技能 |
-|------|--------------|-----------------|
-| 格式 | Markdown (SKILL.md) | YAML + Markdown |
-| 安装 | 复制到目录 | 符号链接或复制 |
-| 配置 | 元数据头部 | skill.yaml |
-| 平台 | 任何支持 OpenClaw 的平台 | 仅限 Claude Code |
 
 ## 贡献
 
