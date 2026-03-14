@@ -1,0 +1,218 @@
+{
+  "version": "1.0.0",
+  "schema_version": "1.0",
+  "description": "OpenClaw File Organizer 默认分类规则",
+  "maintainer": "Leo Baher",
+  "last_updated": "2026-03-14",
+  "base_path": "${WORKSPACE_ROOT}",
+  "naming_conventions": {
+    "date_format": "YYYYMMDD",
+    "timestamp_format": "YYYYMMDD_HHMMSS",
+    "separator": "_",
+    "case_style": "snake_case",
+    "max_filename_length": 100
+  },
+  "rules": [
+    {
+      "id": "screenshots",
+      "name": "截图和图片文件",
+      "description": "网页截图、设计稿、图片资源",
+      "extensions": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico"],
+      "directory": "screenshots",
+      "naming_pattern": "{project}_{YYYYMMDD}_{description}.{ext}",
+      "examples": ["baidu_homepage_20260314.png", "dashboard_design_20260314.jpg"],
+      "confidence": 0.95,
+      "auto_create_dir": true,
+      "subdirs": ["web", "design", "docs"]
+    },
+    {
+      "id": "python_scripts",
+      "name": "Python脚本",
+      "description": "Python工具脚本、Jupyter笔记本、数据分析脚本",
+      "extensions": [".py", ".ipynb", ".pyw"],
+      "directory": "scripts/python",
+      "naming_pattern": "{function}_{module}.py",
+      "examples": ["data_analyzer.py", "api_client.py", "test_runner.ipynb"],
+      "confidence": 0.9,
+      "auto_create_dir": true,
+      "subdirs": ["utils", "analysis", "automation"]
+    },
+    {
+      "id": "node_scripts",
+      "name": "Node.js脚本",
+      "description": "Node.js工具脚本、构建脚本、自动化脚本",
+      "extensions": [".js", ".ts", ".mjs", ".cjs"],
+      "directory": "scripts/node",
+      "naming_pattern": "{function}.{ext}",
+      "examples": ["scraper.js", "build.ts", "deploy.mjs"],
+      "confidence": 0.9,
+      "auto_create_dir": true,
+      "subdirs": ["utils", "build", "deploy"]
+    },
+    {
+      "id": "shell_scripts",
+      "name": "Shell脚本",
+      "description": "Shell、Bash、PowerShell脚本",
+      "extensions": [".sh", ".bash", ".zsh", ".ps1"],
+      "directory": "scripts/shell",
+      "naming_pattern": "{function}.sh",
+      "examples": ["backup.sh", "deploy.ps1", "setup.bash"],
+      "confidence": 0.9,
+      "auto_create_dir": true
+    },
+    {
+      "id": "configs",
+      "name": "配置文件",
+      "description": "应用配置、环境设置、API密钥配置",
+      "extensions": [".json", ".yaml", ".yml", ".conf", ".ini", ".env", ".toml"],
+      "directory": "configs",
+      "naming_pattern": "{service}_{type}.{ext}",
+      "examples": ["api_config.json", "database.yaml", "app.env"],
+      "confidence": 0.85,
+      "auto_create_dir": true,
+      "sensitive": [".env", "*secret*", "*key*", "*token*", "*password*", "*credential*"],
+      "exclude_patterns": ["package.json", "Cargo.toml", "go.mod", "composer.json"]
+    },
+    {
+      "id": "output_docs",
+      "name": "输出文档",
+      "description": "生成的报告、文档、结果、说明文件",
+      "extensions": [".md", ".txt", ".pdf", ".docx", ".html", ".rtf"],
+      "directory": "output",
+      "naming_pattern": "{type}_{YYYYMMDD}_{description}.{ext}",
+      "examples": ["report_20260314_sales.md", "analysis_20260314.pdf"],
+      "confidence": 0.8,
+      "auto_create_dir": true,
+      "subdirs": ["reports", "exports", "generated"],
+      "exclude_patterns": ["README.md", "LICENSE", "CHANGELOG.md", "CONTRIBUTING.md"]
+    },
+    {
+      "id": "data_files",
+      "name": "数据文件",
+      "description": "数据集、数据表、数据库文件",
+      "extensions": [".csv", ".xlsx", ".xls", ".parquet", ".db", ".sqlite", ".jsonl", ".ndjson"],
+      "directory": "data",
+      "naming_pattern": "{dataset}_{date}.{ext}",
+      "examples": ["users_20260314.csv", "sales_data.xlsx", "app.db"],
+      "confidence": 0.85,
+      "auto_create_dir": true,
+      "subdirs": ["raw", "processed", "external", "archive"],
+      "subdir_rules": {
+        "raw": ["*raw*", "*source*", "*origin*", "*原始*"],
+        "processed": ["*processed*", "*clean*", "*final*", "*处理*"],
+        "external": ["*external*", "*download*", "*import*", "*外部*"]
+      }
+    },
+    {
+      "id": "temp_files",
+      "name": "临时文件",
+      "description": "临时文件、日志、缓存（定期清理）",
+      "extensions": [".log", ".tmp", ".cache", ".bak", ".swp", ".temp"],
+      "directory": "temp",
+      "naming_pattern": "{purpose}_{timestamp}.{ext}",
+      "examples": ["debug_20260314_143000.log", "cache.tmp"],
+      "confidence": 0.9,
+      "auto_create_dir": true,
+      "auto_clean": true,
+      "retention_days": 7
+    },
+    {
+      "id": "utils",
+      "name": "工具函数",
+      "description": "可复用的通用工具函数、辅助脚本",
+      "extensions": [".py", ".js", ".sh", ".ps1"],
+      "directory": "utils",
+      "naming_pattern": "{category}_{name}.{ext}",
+      "examples": ["file_helpers.py", "string_utils.js", "deploy.sh"],
+      "confidence": 0.85,
+      "auto_create_dir": true,
+      "exclude_from": ["python_scripts", "node_scripts", "shell_scripts"]
+    },
+    {
+      "id": "docs",
+      "name": "项目文档",
+      "description": "项目文档、说明、设计文档（排除输出报告）",
+      "extensions": [".md"],
+      "directory": "docs",
+      "naming_pattern": "{topic}.md",
+      "examples": ["architecture.md", "api_reference.md", "setup_guide.md"],
+      "confidence": 0.75,
+      "auto_create_dir": true,
+      "exclude_patterns": ["*report*", "*output*", "*result*", "README.md", "CHANGELOG.md", "LICENSE.md"]
+    },
+    {
+      "id": "tests",
+      "name": "测试文件",
+      "description": "单元测试、集成测试文件",
+      "extensions": [".test.py", ".spec.js", ".test.ts", "_test.py", "_spec.js", ".test.jsx", ".test.tsx"],
+      "directory": "tests",
+      "naming_pattern": "{module}_test.{ext}",
+      "examples": ["api_test.py", "utils.spec.js", "component.test.tsx"],
+      "confidence": 0.9,
+      "auto_create_dir": true,
+      "subdirs": ["unit", "integration", "e2e"]
+    },
+    {
+      "id": "assets",
+      "name": "静态资源",
+      "description": "字体、样式、图标等静态资源",
+      "extensions": [".css", ".scss", ".less", ".ttf", ".woff", ".woff2", ".eot"],
+      "directory": "assets",
+      "naming_pattern": "{name}.{ext}",
+      "confidence": 0.85,
+      "auto_create_dir": true,
+      "subdirs": ["fonts", "styles", "icons"]
+    }
+  ],
+  "priority_rules": [
+    {
+      "description": "配置文件冲突时，排除已知的项目配置文件",
+      "rule": "如果文件名匹配 exclude_patterns，跳过此规则"
+    },
+    {
+      "description": "工具函数与脚本冲突",
+      "rule": "如果文件在 scripts/ 目录中，优先使用 scripts 规则"
+    },
+    {
+      "description": "数据文件子目录选择",
+      "rule": "基于文件名关键词选择 raw/processed/external"
+    }
+  ],
+  "team_settings": {
+    "shared_rules_source": "git",
+    "rules_repository": "",
+    "auto_sync": true,
+    "sync_interval_hours": 24,
+    "allow_local_override": true,
+    "conflict_resolution": "ask_user",
+    "local_override_file": ".claude/organization-rules.local.json"
+  },
+  "hooks": {
+    "before_create": [
+      "validate_extension",
+      "check_existing",
+      "suggest_naming"
+    ],
+    "after_create": [
+      "confirm_location",
+      "update_index",
+      "log_operation"
+    ]
+  },
+  "validation": {
+    "require_directory_exists": false,
+    "auto_create_directories": true,
+    "check_filename_length": true,
+    "max_filename_length": 100,
+    "forbidden_chars": ["<", ">", ":", "\"", "/", "\\", "|", "?", "*"],
+    "reserved_names": ["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"]
+  },
+  "logging": {
+    "enabled": true,
+    "log_dir": "${HOME}/.openclaw/skills/file-organizer/logs",
+    "format": "json",
+    "retention_days": 30,
+    "max_log_size_mb": 10,
+    "log_level": "info"
+  }
+}
